@@ -130,6 +130,12 @@ impl<'de> Deserialize<'de> for Value {
                     None => Ok(Value::Object(Map::new())),
                 }
             }
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                where
+                    E: de::Error, {
+                let vec = v.to_vec();
+                Ok(Value::Bin(vec))
+            }
         }
 
         deserializer.deserialize_any(ValueVisitor)
@@ -221,6 +227,7 @@ impl<'de> serde::Deserializer<'de> for Value {
             Value::String(v) => visitor.visit_string(v),
             Value::Array(v) => visit_array(v, visitor),
             Value::Object(v) => visit_object(v, visitor),
+            Value::Bin(v) => visitor.visit_byte_buf(v),
         }
     }
 
@@ -722,6 +729,7 @@ impl<'de> serde::Deserializer<'de> for &'de Value {
             Value::String(v) => visitor.visit_borrowed_str(v),
             Value::Array(v) => visit_array_ref(v, visitor),
             Value::Object(v) => visit_object_ref(v, visitor),
+            Value::Bin(v) => visitor.visit_borrowed_bytes(v),
         }
     }
 
@@ -1314,6 +1322,7 @@ impl Value {
             Value::String(s) => Unexpected::Str(s),
             Value::Array(_) => Unexpected::Seq,
             Value::Object(_) => Unexpected::Map,
+            Value::Bin(v) => Unexpected::Bytes(v),
         }
     }
 }

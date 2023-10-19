@@ -29,6 +29,7 @@ impl Serialize for Value {
                 }
                 map.end()
             }
+            Value::Bin(v) => serializer.serialize_bytes(v),
         }
     }
 }
@@ -168,8 +169,8 @@ impl serde::Serializer for Serializer {
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Value> {
-        let vec = value.iter().map(|&b| Value::Number(b.into())).collect();
-        Ok(Value::Array(vec))
+        let vec = value.iter().map(|&b| b).collect();
+        Ok(Value::Bin(vec))
     }
 
     #[inline]

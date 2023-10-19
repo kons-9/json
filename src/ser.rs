@@ -189,9 +189,12 @@ where
 
     #[inline]
     fn serialize_bytes(self, value: &[u8]) -> Result<()> {
-        self.formatter
-            .write_byte_array(&mut self.writer, value)
-            .map_err(Error::io)
+        write!(self.writer, "bin(0x").unwrap();
+        for byte in value {
+            write!(self.writer, "{:02x}", byte).unwrap();
+        }
+        write!(self.writer, ")").unwrap();
+        Ok(())
     }
 
     #[inline]

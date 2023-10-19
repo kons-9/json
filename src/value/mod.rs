@@ -172,6 +172,9 @@ pub enum Value {
     /// let v = json!({ "an": "object" });
     /// ```
     Object(Map<String, Value>),
+
+    /// hello world
+    Bin(Vec<u8>),
 }
 
 impl Debug for Value {
@@ -189,6 +192,7 @@ impl Debug for Value {
                 tri!(formatter.write_str("Object "));
                 Debug::fmt(map, formatter)
             }
+            Value::Bin(bin) => write!(formatter, "Bin({:?})", bin),
         }
     }
 }

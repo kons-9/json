@@ -258,6 +258,98 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    fn parse_bin(&mut self) -> Result<Vec<u8>> {
+        let mut byte = self.next_char()?;
+        let flag = if byte == Some(b'0') && self.peek()? == Some(b'b') {
+            self.next_char()?;
+            byte = self.next_char()?;
+            0b01
+        } else if byte == Some(b'0') && self.peek()? == Some(b'x') {
+            self.next_char()?;
+            byte = self.next_char()?;
+            0b10
+        } else {
+            0b10
+        };
+
+        let mut is_first = true;
+        let mut tmp_byte = vec![];
+
+        loop {
+            match byte.unwrap() {
+                b'0'..=b'1' => {}
+                b'2'..=b'9' | b'a'..=b'f' | b'A'..=b'F' => {
+                    if flag == 0b01 {
+                        return Err(self.error(ErrorCode::ExpectedSomeValue));
+                    }
+                }
+                b':' | b'_' => {
+                    if is_first {
+                        return Err(self.error(ErrorCode::ExpectedSomeValue));
+                    }
+                    byte = self.next_char()?;
+                    continue;
+                }
+                b')' => {
+                    if is_first {
+                        return Err(self.error(ErrorCode::ExpectedSomeValue));
+                    }
+                    break;
+                }
+                _ => {
+                    return Err(self.error(ErrorCode::ExpectedSomeValue));
+                }
+            }
+            is_first = false;
+            tmp_byte.push(byte.unwrap());
+            byte = self.next_char()?;
+        }
+        let bytes: Vec<_> = if flag == 0b01 {
+            for _ in 0..((8 - tmp_byte.len() % 8) % 8) {
+                tmp_byte.insert(0, b'0');
+            }
+            tmp_byte
+                .chunks(8)
+                .map(|chunk| {
+                    let mut byte = 0;
+                    for (i, &b) in chunk.iter().enumerate() {
+                        byte += (b - b'0') * 2u8.pow(7 - i as u32);
+                    }
+                    byte
+                })
+                .collect()
+        } else if flag == 0b10 {
+            for _ in 0..(2 - tmp_byte.len() % 2) % 2 {
+                tmp_byte.insert(0, b'0');
+            }
+            tmp_byte
+                .chunks(2)
+                .map(|chunk| {
+                    let mut byte = 0;
+                    for (i, &b) in chunk.iter().enumerate() {
+                        match b {
+                            b'0'..=b'9' => {
+                                byte += (b - b'0') * 16u8.pow(1 - i as u32);
+                            }
+                            b'a'..=b'f' => {
+                                byte += (b - b'a' + 10) * 16u8.pow(1 - i as u32);
+                            }
+                            b'A'..=b'F' => {
+                                byte += (b - b'A' + 10) * 16u8.pow(1 - i as u32);
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    byte
+                })
+                .collect()
+        } else {
+            unreachable!()
+        };
+
+        Ok(bytes)
+    }
+
     #[cold]
     fn peek_invalid_type(&mut self, exp: &dyn Expected) -> Error {
         let err = match self.peek_or_null().unwrap_or(b'\x00') {
@@ -1442,6 +1534,15 @@ impl<'de, 'a, R: Read<'de>> de::Deserializer<'de> for &'a mut Deserializer<R> {
                     (Ok(ret), Ok(())) => Ok(ret),
                     (Err(err), _) | (_, Err(err)) => Err(err),
                 }
+            }
+            b'b' => {
+                // expect bin()
+                // it is like bin(0b101010) or or bin("0x1234") or bin(1234) (= bin(0x1234))
+                self.eat_char();
+                tri!(self.parse_ident(b"in"));
+                tri!(self.parse_ident(b"("));
+                let bytes = &tri!(self.parse_bin());
+                visitor.visit_bytes(bytes)
             }
             _ => Err(self.peek_error(ErrorCode::ExpectedSomeValue)),
         };
